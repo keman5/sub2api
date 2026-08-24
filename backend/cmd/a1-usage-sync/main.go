@@ -109,12 +109,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer source.Close()
+	defer logCloseError("source database", source.Close)
 	target, err := sql.Open("postgres", dsn(cfg.targetDB))
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer target.Close()
+	defer logCloseError("target database", target.Close)
 
 	if err := source.PingContext(ctx); err != nil {
 		log.Fatalf("source database unavailable: %v", err)
@@ -211,6 +211,12 @@ func main() {
 	log.Printf("usage sync finished: users=%d source_accounts=%d source_api_keys=%d source_subscriptions=%d logs_inserted=%d logs_existing=%d logs_skipped=%d billing_added=%d billing_existing=%d dry_run=%t", len(userMap), len(accountMap), len(sourceKeys), len(sourceSubs), result.logsInserted, result.logsExisting, result.logsSkipped, result.billingAdded, result.billingExists, *dryRun)
 }
 
+func logCloseError(label string, closeFn func() error) {
+	if err := closeFn(); err != nil {
+		log.Printf("close %s: %v", label, err)
+	}
+}
+
 func loadConfig(path string) (config, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -283,7 +289,7 @@ func loadUsers(ctx context.Context, db *sql.DB, ids []int64) (map[int64]user, er
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer logCloseError("source users rows", rows.Close)
 	result := make(map[int64]user)
 	for rows.Next() {
 		var item user
@@ -300,7 +306,7 @@ func loadUsersByEmail(ctx context.Context, db *sql.DB) (map[string][]user, error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer logCloseError("target users rows", rows.Close)
 	result := make(map[string][]user)
 	for rows.Next() {
 		var item user
@@ -330,7 +336,7 @@ func loadGroups(ctx context.Context, db *sql.DB) (map[string]group, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer logCloseError("groups rows", rows.Close)
 	result := make(map[string]group)
 	for rows.Next() {
 		var item group
@@ -378,7 +384,7 @@ func loadAccounts(ctx context.Context, db *sql.DB) ([]account, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer logCloseError("billing source rows", rows.Close)
 	var result []account
 	for rows.Next() {
 		var item account
@@ -510,7 +516,7 @@ func loadAPIKeys(ctx context.Context, db *sql.DB, userIDs []int64) (map[int64]ap
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer logCloseError("accounts rows", rows.Close)
 	result := make(map[int64]apiKey)
 	for rows.Next() {
 		var item apiKey
@@ -585,7 +591,7 @@ func loadSubscriptions(ctx context.Context, db *sql.DB, userIDs []int64) (map[in
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer logCloseError("source API keys rows", rows.Close)
 	result := make(map[int64]subscription)
 	for rows.Next() {
 		var item subscription
@@ -648,7 +654,7 @@ func loadLogState(ctx context.Context, db *sql.DB, dryRun bool) (map[int64]int64
 	if err != nil {
 		return nil, nil, err
 	}
-	defer rows.Close()
+	defer logCloseError("target API keys rows", rows.Close)
 	for rows.Next() {
 		var sourceID, targetID int64
 		if err := rows.Scan(&sourceID, &targetID); err != nil {
@@ -669,7 +675,7 @@ func syncUsageLogs(ctx context.Context, source, target *sql.DB, userIDs []int64,
 	if err != nil {
 		return stats{}, err
 	}
-	defer rows.Close()
+	defer logCloseError("subscriptions rows", rows.Close)
 
 	insertSQL := `INSERT INTO usage_logs (` + strings.Join(quoteIdentifiers(cols), ", ") + `) VALUES (` + placeholders(len(cols)) + `) ON CONFLICT (request_id, api_key_id) DO NOTHING RETURNING id`
 	indexes := make(map[string]int, len(cols))
@@ -814,7 +820,7 @@ func usageLogColumns(ctx context.Context, db *sql.DB) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer logCloseError("usage logs rows", rows.Close)
 	var result []string
 	for rows.Next() {
 		var column string
@@ -867,7 +873,7 @@ func syncBillingEntries(ctx context.Context, source, target *sql.DB, userIDs []i
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer logCloseError("billing source rows", rows.Close)
 	stateRows, err := target.QueryContext(ctx, `SELECT source_id FROM a1_billing_usage_entry_sync`)
 	if err != nil {
 		return err
@@ -876,7 +882,7 @@ func syncBillingEntries(ctx context.Context, source, target *sql.DB, userIDs []i
 	for stateRows.Next() {
 		var sourceID int64
 		if err := stateRows.Scan(&sourceID); err != nil {
-			_ = stateRows.Close()
+			logCloseError("billing state rows", stateRows.Close)
 			return err
 		}
 		known[sourceID] = struct{}{}
@@ -888,17 +894,21 @@ func syncBillingEntries(ctx context.Context, source, target *sql.DB, userIDs []i
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && !errors.Is(rollbackErr, sql.ErrTxDone) {
+			log.Printf("rollback billing sync transaction: %v", rollbackErr)
+		}
+	}()
 	insertEntry, err := tx.PrepareContext(ctx, `INSERT INTO billing_usage_entries (usage_log_id,user_id,api_key_id,subscription_id,billing_type,applied,delta_usd,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`)
 	if err != nil {
 		return err
 	}
-	defer insertEntry.Close()
+	defer logCloseError("billing entry statement", insertEntry.Close)
 	insertState, err := tx.PrepareContext(ctx, `INSERT INTO a1_billing_usage_entry_sync (source_id,target_id) VALUES ($1,$2) ON CONFLICT (source_id) DO NOTHING`)
 	if err != nil {
 		return err
 	}
-	defer insertState.Close()
+	defer logCloseError("billing state statement", insertState.Close)
 
 	for rows.Next() {
 		var sourceID, sourceLogID, sourceUserID, sourceKeyID int64

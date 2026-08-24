@@ -79,7 +79,7 @@
   }
 
   html {
-    @apply antialiased;
+    @apply scroll-smooth antialiased;
     font-family:
       'Space Grotesk',
       ui-sans-serif,
@@ -92,6 +92,10 @@
 
   html.home-scroll-restoring {
     scroll-behavior: auto !important;
+  }
+
+  .dark {
+    color-scheme: dark;
   }
 
   body {
