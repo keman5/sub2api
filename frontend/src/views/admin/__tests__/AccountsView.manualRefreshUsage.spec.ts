@@ -9,6 +9,7 @@ const {
   listWithEtag,
   getBatchUsage,
   getUsage,
+  getById,
   refreshOpenAIQuota,
   getBatchTodayStats,
   getUpstreamBillingProbeSettings,
@@ -19,6 +20,7 @@ const {
   listWithEtag: vi.fn(),
   getBatchUsage: vi.fn(),
   getUsage: vi.fn(),
+  getById: vi.fn(),
   refreshOpenAIQuota: vi.fn(),
   getBatchTodayStats: vi.fn(),
   getUpstreamBillingProbeSettings: vi.fn(),
@@ -33,6 +35,7 @@ vi.mock('@/api/admin', () => ({
       listWithEtag,
       getBatchUsage,
       getUsage,
+      getById,
       refreshOpenAIQuota,
       getBatchTodayStats,
       getUpstreamBillingProbeSettings,
@@ -224,6 +227,7 @@ describe('admin AccountsView manual usage refresh', () => {
     listWithEtag.mockReset()
     getBatchUsage.mockReset()
     getUsage.mockReset()
+    getById.mockReset()
     refreshOpenAIQuota.mockReset()
     getBatchTodayStats.mockReset()
     getUpstreamBillingProbeSettings.mockReset()
@@ -233,6 +237,7 @@ describe('admin AccountsView manual usage refresh', () => {
     listWithEtag.mockResolvedValue({ notModified: true, etag: null, data: null })
     getBatchUsage.mockResolvedValue({ usage: {}, errors: {} })
     getUsage.mockResolvedValue({})
+    getById.mockImplementation(async (accountID: number) => createAccount(accountID, `account-${accountID}`))
     refreshOpenAIQuota.mockResolvedValue({})
     getBatchTodayStats.mockResolvedValue({ stats: {} })
     getUpstreamBillingProbeSettings.mockResolvedValue({ enabled: false })
@@ -252,9 +257,10 @@ describe('admin AccountsView manual usage refresh', () => {
     expect(listAccounts).toHaveBeenCalledWith(
       1,
       20,
-      expect.objectContaining({ refresh_usage: 'true' }),
+      expect.not.objectContaining({ refresh_usage: 'true' }),
       expect.anything()
     )
+    expect(getUsage).toHaveBeenCalledWith(1, 'active')
 
     wrapper.unmount()
   })
@@ -337,7 +343,9 @@ describe('admin AccountsView manual usage refresh', () => {
     expect(getUsage).toHaveBeenCalledWith(1, 'active')
     expect(getBatchUsage).not.toHaveBeenCalled()
 
+    getById.mockResolvedValueOnce(createAccount(1, 'anthropic-oauth'))
     await wrapper.get('[data-test="row"] button').trigger('click')
+    await flushPromises()
     expect(wrapper.get('[data-test="edit-modal"]').text()).toBe('anthropic-oauth')
 
     releaseFirstUsage?.()

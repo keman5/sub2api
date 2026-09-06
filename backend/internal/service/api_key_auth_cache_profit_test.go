@@ -53,6 +53,7 @@ func TestAPIKeyAuthSnapshotProfitControlRoundtrip(t *testing.T) {
 	snapshot := svc.snapshotFromAPIKey(context.Background(), apiKey)
 	require.NotNil(t, snapshot)
 	require.Equal(t, apiKeyAuthSnapshotVersion, snapshot.Version)
+	require.Equal(t, apiKeyAuthSnapshotVersion, snapshot.Version, "认证快照版本必须与当前常量一致")
 	require.GreaterOrEqual(t, snapshot.Version, 18, "v18 起认证快照携带利润控制字段")
 	require.GreaterOrEqual(t, snapshot.Version, 19, "v19 起认证快照携带 search/audio/video_model_prices 计费字段")
 	require.GreaterOrEqual(t, snapshot.Version, 20, "v20 起认证快照携带分组长上下文与模型定价字段")

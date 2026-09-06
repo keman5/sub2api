@@ -211,7 +211,7 @@ func (s *DashboardService) GetUsageTrendWithUsageFilters(ctx context.Context, st
 	// for the normal admin view; the newer usage-filter path is required only
 	// when upstream model mismatch filtering is present because the legacy view
 	// API cannot carry that predicate.
-	if filters.UpstreamModelMismatch == nil {
+	if filters.UpstreamModelMismatch == nil && filters.NativeCompactionV2 == nil {
 		if _, ok := s.usageRepo.(usageTrendWithViewRepository); ok {
 			return s.GetUsageTrendWithFiltersForView(ctx, startTime, endTime, granularity, filters.UserID, filters.APIKeyID, filters.AccountID, filters.GroupID, filters.Model, filters.RequestType, filters.Stream, filters.BillingType, filters.UsePresentationMultiplier)
 		}
@@ -279,7 +279,7 @@ func (s *DashboardService) GetModelStatsWithUsageFiltersBySource(ctx context.Con
 	type modelStatsWithFiltersRepo interface {
 		GetModelStatsWithUsageFiltersBySource(context.Context, time.Time, time.Time, usagestats.UsageLogFilters, string) ([]usagestats.ModelStat, error)
 	}
-	if filters.UpstreamModelMismatch == nil {
+	if filters.UpstreamModelMismatch == nil && filters.NativeCompactionV2 == nil {
 		if _, ok := s.usageRepo.(modelStatsWithViewRepository); ok {
 			return s.GetModelStatsWithFiltersBySourceForView(ctx, startTime, endTime, filters.UserID, filters.APIKeyID, filters.AccountID, filters.GroupID, filters.RequestType, filters.Stream, filters.BillingType, normalizedSource, filters.UsePresentationMultiplier)
 		}
@@ -324,7 +324,7 @@ func (s *DashboardService) GetGroupStatsWithUsageFilters(ctx context.Context, st
 	type groupStatsWithFiltersRepo interface {
 		GetGroupStatsWithUsageFilters(context.Context, time.Time, time.Time, usagestats.UsageLogFilters) ([]usagestats.GroupStat, error)
 	}
-	if filters.UpstreamModelMismatch == nil {
+	if filters.UpstreamModelMismatch == nil && filters.NativeCompactionV2 == nil {
 		if _, ok := s.usageRepo.(groupStatsWithViewRepository); ok {
 			return s.GetGroupStatsWithFiltersForView(ctx, startTime, endTime, filters.UserID, filters.APIKeyID, filters.AccountID, filters.GroupID, filters.RequestType, filters.Stream, filters.BillingType, filters.UsePresentationMultiplier)
 		}

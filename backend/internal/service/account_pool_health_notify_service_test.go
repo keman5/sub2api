@@ -37,6 +37,9 @@ func (r *accountPoolHealthRepoStub) ListCRSAccountIDs(context.Context) (map[stri
 }
 func (r *accountPoolHealthRepoStub) Update(context.Context, *Account) error { return nil }
 func (r *accountPoolHealthRepoStub) Delete(context.Context, int64) error    { return nil }
+func (r *accountPoolHealthRepoStub) ResetQuotaUsedAndClearRateLimitCooldown(context.Context, int64) error {
+	return nil
+}
 func (r *accountPoolHealthRepoStub) List(_ context.Context, params pagination.PaginationParams) ([]Account, *pagination.PaginationResult, error) {
 	page := params.Page
 	if page < 1 {
